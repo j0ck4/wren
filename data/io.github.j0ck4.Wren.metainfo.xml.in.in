@@ -46,6 +46,11 @@
   </branding>
 
   <releases>
+    <release version="0.2.3" date="2026-11-21">
+      <description>
+        <p>Fixes connecting on Ubuntu 26.04 and newer, where AppArmor only lets wg-quick read configs from /etc/wireguard. While a tunnel is up, Wren keeps a root-only copy of its config there and removes it on disconnect. The password is now asked on every connect and disconnect.</p>
+      </description>
+    </release>
     <release version="0.2.2" date="2026-06-09">
       <description>
         <p>Packaging release toward Flathub: tightened sandbox permissions and project rename to "wren". No functional changes.</p>

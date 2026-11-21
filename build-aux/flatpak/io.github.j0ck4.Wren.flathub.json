@@ -38,8 +38,8 @@
                 {
                     "type": "git",
                     "url": "https://github.com/j0ck4/wren.git",
-                    "tag": "v0.2.2",
-                    "commit": "bf2cb153c20cb9634dc280c321491c626eb53970"
+                    "tag": "v0.2.3",
+                    "commit": "TBD"
                 },
                 "cargo-sources.json"
             ]
