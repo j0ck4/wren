@@ -34,8 +34,7 @@ without touching a terminal.
 ## Features
 
 - **One-click connect / disconnect** through `wg-quick`, authorized via
-  polkit (your password is cached for a few minutes, not asked every
-  time).
+  polkit.
 - **Import any standard `.conf`** with a file picker — no editing by
   hand.
 - **Live transfer stats** (received / sent) that refresh every two

@@ -3,24 +3,66 @@
 //! Wren runs inside a Flatpak sandbox, so every command is executed
 //! on the host via `flatpak-spawn --host`. Privileged commands go
 //! through `pkexec`, which presents a polkit prompt.
+//!
+//! Ubuntu 26.04 confines `wg-quick` to reading configs
+//! under `/etc/wireguard`, so connect/disconnect run `wren-tunnel.sh`
+//! as root: it copies the config (fed via stdin, keeping the private
+//! key out of argv) into `/etc/wireguard` for the tunnel's lifetime.
 
 // `args` (the command words) and `argv` (the full flatpak-spawn argv)
 // are deliberately distinct here.
 #![allow(clippy::similar_names)]
 
-use std::{collections::HashSet, ffi::OsStr, path::Path};
+use std::{collections::HashSet, ffi::OsStr, fs, path::Path};
 
 use anyhow::{Context, Result, bail};
-use gtk::gio;
+use gtk::{gio, glib};
+
+const TUNNEL_HELPER: &str = include_str!("wren-tunnel.sh");
 
 pub async fn up(config_path: &Path) -> Result<()> {
-    let path = config_path.to_string_lossy();
-    run(&["pkexec", "wg-quick", "up", &path]).await
+    tunnel("up", config_path).await
 }
 
 pub async fn down(config_path: &Path) -> Result<()> {
-    let path = config_path.to_string_lossy();
-    run(&["pkexec", "wg-quick", "down", &path]).await
+    tunnel("down", config_path).await
+}
+
+async fn tunnel(action: &str, config_path: &Path) -> Result<()> {
+    let name = config_path
+        .file_stem()
+        .and_then(OsStr::to_str)
+        .with_context(|| format!("no tunnel name in {}", config_path.display()))?;
+    let config = fs::read_to_string(config_path)
+        .with_context(|| format!("reading {}", config_path.display()))?;
+    // pkexec shows the full command line in its password prompt, so the
+    // helper travels over stdin ahead of the config, NUL-separated.
+    let mut input = Vec::with_capacity(TUNNEL_HELPER.len() + 1 + config.len());
+    input.extend_from_slice(TUNNEL_HELPER.as_bytes());
+    input.push(0);
+    input.extend_from_slice(config.as_bytes());
+    let args = [
+        "pkexec",
+        "/usr/bin/bash",
+        "-c",
+        r#"read -rd '' s && eval "$s""#,
+        "wren-tunnel",
+        action,
+        name,
+    ];
+    let proc = spawn(&args, gio::SubprocessFlags::STDIN_PIPE)?;
+    let (_, err) = proc
+        .communicate_future(Some(&glib::Bytes::from_owned(input)))
+        .await
+        .context("waiting for host command")?;
+    if !proc.is_successful() {
+        let err = err.map(|b| String::from_utf8_lossy(&b).into_owned());
+        bail!(
+            "wg-quick {action} {name} failed: {}",
+            err.unwrap_or_default().trim()
+        );
+    }
+    Ok(())
 }
 
 /// Reads the cumulative byte counters for a wireguard interface.
@@ -64,26 +106,12 @@ pub async fn active_interfaces() -> Result<HashSet<String>> {
         .collect())
 }
 
-async fn run(args: &[&str]) -> Result<()> {
-    let argv = host_argv(args);
-    let proc = gio::Subprocess::newv(&argv, flags()).context("spawning host command")?;
-    let (_, err) = proc
-        .communicate_utf8_future(None)
-        .await
-        .context("waiting for host command")?;
-    if !proc.is_successful() {
-        bail!(
-            "{} failed: {}",
-            args.join(" "),
-            err.map(|s| s.to_string()).unwrap_or_default().trim()
-        );
-    }
-    Ok(())
+fn spawn(args: &[&str], extra: gio::SubprocessFlags) -> Result<gio::Subprocess> {
+    gio::Subprocess::newv(&host_argv(args), flags() | extra).context("spawning host command")
 }
 
 async fn capture(args: &[&str]) -> Result<String> {
-    let argv = host_argv(args);
-    let proc = gio::Subprocess::newv(&argv, flags()).context("spawning host command")?;
+    let proc = spawn(args, gio::SubprocessFlags::NONE)?;
     let (out, err) = proc
         .communicate_utf8_future(None)
         .await

@@ -3,7 +3,7 @@
 The full version of the Wren documentation. Compared to the
 end-user-focused [`USAGE.md`](./USAGE.md), this document also
 covers native installation, building from source, file layout
-in detail, and the polkit policy.
+in detail, and how Wren gets root.
 
 🇷🇺 Русская версия — [DEVELOPING.ru.md](./DEVELOPING.ru.md).
 
@@ -95,8 +95,7 @@ sudo ninja -C builddir uninstall
 ```
 
 This removes exactly the files Meson placed under `/usr`
-(`/usr/bin/wren`, the `.desktop`, metainfo, gresource, icons, and
-the polkit policy).
+(`/usr/bin/wren`, the `.desktop`, metainfo, gresource, and icons).
 
 Both commands leave your tunnels and settings untouched. To wipe
 those too — note they hold private keys — delete the config dir:
@@ -268,18 +267,20 @@ dialog asks:
 
 ---
 
-## 11. Polkit policy
+## 11. Root access
 
-Wren needs root only to talk to `wg-quick`. The policy file
-installed at `/usr/share/polkit-1/actions/io.github.j0ck4.Wren.policy`
-sets `auth_admin_keep`, meaning:
+Wren needs root only to run `wg-quick`. Each connect/disconnect is a
+single `pkexec /usr/bin/bash` call that reads the helper
+`src/wg/wren-tunnel.sh` from stdin, so polkit asks for the password
+every time.
 
-> Once you authenticate, subsequent connect/disconnect actions
-> within ~5 minutes don't ask again.
-
-Inside Flatpak the policy file isn't installed system-wide, so the
-prompt appears every time. Use the native install (Option B above)
-or wait for `.deb` packaging on Ubuntu 26.04+ for a smoother flow.
+Ubuntu 26.04 ships an AppArmor profile that lets `wg-quick` read
+configs only from `/etc/wireguard`. The helper therefore receives
+the config on stdin, writes it to `/etc/wireguard/<name>.conf`
+(mode 0600, first line `# Managed by Wren; removed on disconnect.`),
+runs `wg-quick`, and deletes the copy on disconnect. A file with
+the same name that lacks this marker is never overwritten — the
+connect fails with an error instead.
 
 ---
 
@@ -299,10 +300,9 @@ the file under `~/.config/wren/tunnels/` to a-z / 0-9 / `.-_`,
 Install the AppIndicator extension (see *§8*). Wren itself prints
 *Tray service unavailable* in the log and continues working.
 
-**`pkexec` keeps asking for the password**
-You're running the Flatpak version. The polkit policy can't be
-installed inside the sandbox; switch to a native install for
-session-wide caching.
+**`/etc/wireguard/<name>.conf already exists and is not managed by Wren`**
+You have your own config with the same name in `/etc/wireguard`.
+Rename the tunnel in Wren or move that file away.
 
 **`Could not refresh tunnel status`**
 Wren reads `/sys/class/net` to see which tunnels are up. The host
@@ -324,7 +324,7 @@ view.
 | Tunnel configs | `~/.config/wren/tunnels/` | `~/.var/app/io.github.j0ck4.Wren.Devel/config/wren/tunnels/` |
 | Autostart entry | `~/.config/autostart/io.github.j0ck4.Wren.desktop` | same (granted by `xdg-config/autostart` permission) |
 | Binary | `/usr/bin/wren` | inside the bundle |
-| Polkit policy | `/usr/share/polkit-1/actions/io.github.j0ck4.Wren.policy` | not installed |
+| Config copy while connected | `/etc/wireguard/<name>.conf` | same |
 
 ---
 

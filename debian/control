@@ -33,6 +33,4 @@ Description: Native GTK4 WireGuard VPN client
  with one click via wg-quick (elevated through polkit), and shows live
  RX/TX counters from /sys/class/net.
  .
- The application follows the GNOME Human Interface Guidelines and
- ships a polkit policy so the password prompt is required once per
- admin session, not on every action.
+ The application follows the GNOME Human Interface Guidelines.

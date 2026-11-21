@@ -118,15 +118,11 @@ If you close the window with tunnels still up, a dialog asks:
 
 ### Authentication frequency
 
-The first connect of an admin session asks for a password; the
-polkit policy (`auth_admin_keep`) caches that authentication for
-~5 minutes, so subsequent connect/disconnect actions inside that
-window don't ask again.
-
-> Caveat: inside the Flatpak sandbox the policy file isn't
-> installed system-wide, so the prompt may appear every time.
-> The native (`apt`) install closes that gap, and is on the
-> roadmap for Ubuntu 26.04+.
+Every connect and disconnect asks for your password. While a
+tunnel is up, Wren keeps a root-only copy of its config at
+`/etc/wireguard/<name>.conf` (that is the only place `wg-quick` is
+allowed to read from on Ubuntu 26.04+); the copy is removed on
+disconnect.
 
 ---
 

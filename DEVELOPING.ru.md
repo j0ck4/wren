@@ -3,7 +3,7 @@
 Полная версия документации Wren. В отличие от
 [`USAGE.ru.md`](./USAGE.ru.md), ориентированного на обычных
 пользователей, здесь есть native-установка, сборка из исходников,
-подробная карта файлов и политика polkit.
+подробная карта файлов и то, как Wren получает root.
 
 🇬🇧 English version — [DEVELOPING.md](./DEVELOPING.md).
 
@@ -95,8 +95,7 @@ sudo ninja -C builddir uninstall
 ```
 
 Удаляются ровно те файлы, что Meson положил в `/usr`
-(`/usr/bin/wren`, `.desktop`, metainfo, gresource, иконки и политика
-polkit).
+(`/usr/bin/wren`, `.desktop`, metainfo, gresource и иконки).
 
 Обе команды не трогают ваши туннели и настройки. Чтобы стереть и их
 — учтите, что в них приватные ключи — удалите каталог конфигов:
@@ -263,18 +262,21 @@ Save проверяет, что PrivateKey и PublicKey каждого peer не
 
 ---
 
-## 11. Polkit policy
+## 11. Права root
 
-Wren требует root только чтобы дёргать `wg-quick`. Файл политики
-по адресу `/usr/share/polkit-1/actions/io.github.j0ck4.Wren.policy`
-содержит `auth_admin_keep`, что значит:
+Wren требует root только чтобы запускать `wg-quick`. Каждое
+подключение/отключение — один вызов
+`pkexec /usr/bin/bash`, который читает helper
+`src/wg/wren-tunnel.sh` из stdin, поэтому polkit спрашивает пароль
+каждый раз.
 
-> После первой аутентификации последующие connect/disconnect
-> в течение ~5 минут не запрашивают пароль повторно.
-
-Внутри Flatpak файл политики не устанавливается системно, поэтому
-промт появляется каждый раз. Используйте Native установку (Вариант B)
-или дождитесь `.deb` для Ubuntu 26.04+ для бесшовного процесса.
+В Ubuntu 26.04 AppArmor-профиль разрешает `wg-quick` читать конфиги
+только из `/etc/wireguard`. Поэтому helper получает конфиг через
+stdin, пишет его в `/etc/wireguard/<name>.conf` (права 0600, первая
+строка `# Managed by Wren; removed on disconnect.`), запускает
+`wg-quick` и удаляет копию при отключении. Файл с тем же именем без
+этой метки никогда не перезаписывается — подключение завершится
+ошибкой.
 
 ---
 
@@ -294,10 +296,9 @@ Wren требует root только чтобы дёргать `wg-quick`. Фа
 Поставьте AppIndicator-расширение (см. *§8*). Wren сам напишет
 в логах *Tray service unavailable* и продолжит работать без иконки.
 
-**`pkexec` каждый раз спрашивает пароль**
-Вы используете Flatpak-версию. Polkit-policy не может быть
-установлена внутри песочницы; используйте Native установку для
-кэширования по сессии.
+**`/etc/wireguard/<name>.conf already exists and is not managed by Wren`**
+В `/etc/wireguard` уже лежит ваш собственный конфиг с таким именем.
+Переименуйте туннель в Wren или уберите этот файл.
 
 **`Could not refresh tunnel status`**
 Wren читает `/sys/class/net` чтобы понять, какие туннели подняты.
@@ -318,7 +319,7 @@ Wren читает `/sys/class/net` чтобы понять, какие тунн�
 | Конфиги туннелей | `~/.config/wren/tunnels/` | `~/.var/app/io.github.j0ck4.Wren.Devel/config/wren/tunnels/` |
 | Autostart | `~/.config/autostart/io.github.j0ck4.Wren.desktop` | туда же (через permission `xdg-config/autostart`) |
 | Бинарь | `/usr/bin/wren` | внутри bundle |
-| Polkit policy | `/usr/share/polkit-1/actions/io.github.j0ck4.Wren.policy` | не устанавливается |
+| Копия конфига при подключении | `/etc/wireguard/<name>.conf` | так же |
 
 ---
 
